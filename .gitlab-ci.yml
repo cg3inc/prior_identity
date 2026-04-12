@@ -13,6 +13,7 @@ test:
   script:
     - npm ci
     - npx tsc --noEmit
+    - npm run build
     - npm test
   rules:
     - if: $CI_PIPELINE_SOURCE == "push"
