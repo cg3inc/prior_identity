@@ -1,7 +1,7 @@
 # @cg3/prior-identity
 
 [![npm version](https://img.shields.io/npm/v/@cg3/prior-identity)](https://www.npmjs.com/package/@cg3/prior-identity)
-[![license](https://img.shields.io/npm/l/@cg3/prior-identity)](https://github.com/cg3/prior-identity/blob/main/LICENSE)
+[![license](https://img.shields.io/badge/license-Apache--2.0-blue)](./LICENSE)
 [![node](https://img.shields.io/node/v/@cg3/prior-identity)](https://nodejs.org)
 
 ```typescript
@@ -272,10 +272,10 @@ For non-Node environments (Python, Go, etc.), verify tokens with any JWT library
 
 ## Getting started
 
-1. **Create a free publisher profile** at [prior.cg3.io/publishers](https://prior.cg3.io/publishers) (~30 seconds, GitHub/Google/Discord login)
+1. **Create a free creator profile** at [cg3.io/equip/create](https://cg3.io/equip/create) (~30 seconds, GitHub/Google/Discord login)
 2. **Register your augment name** (claimed, unique -- prevents impersonation)
 3. `npm install @cg3/prior-identity`
-4. Follow the **[Publisher Integration Guide](https://prior.cg3.io/docs/identity/publisher-guide)** for step-by-step setup
+4. Follow the **[Publisher Integration Guide](https://cg3.io/docs/identity/publisher-guide)** for step-by-step setup
 
 For local development, the SDK works without registration. Production token issuance requires a registered name.
 
@@ -301,8 +301,8 @@ Also enabled when `NODE_ENV=development`.
 
 ## Docs
 
-- **[Publisher Integration Guide](https://prior.cg3.io/docs/identity/publisher-guide)** -- complete setup, transport patterns, account linking, testing
-- **[API Reference](https://prior.cg3.io/docs/identity/api-reference)** -- full function signatures, config options, types, environment variables
+- **[Publisher Integration Guide](https://cg3.io/docs/identity/publisher-guide)** -- complete setup, transport patterns, account linking, testing
+- **[API Reference](https://cg3.io/docs/identity/api-reference)** -- full function signatures, config options, types, environment variables
 
 ## License
 
