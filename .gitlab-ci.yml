@@ -4,6 +4,11 @@ stages:
 
 variables:
   NODE_VERSION: "22"
+  CG3_DOCKER_RUNNER_TAG: "cg3-docker"
+
+default:
+  tags:
+    - $CG3_DOCKER_RUNNER_TAG
 
 # --- Test on every push ---
 
