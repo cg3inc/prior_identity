@@ -1,6 +1,6 @@
 {
   "name": "@cg3/prior-identity",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Prior Identity SDK — add user identity to your MCP server in 3 lines",
   "type": "module",
   "main": "dist/index.js",
@@ -15,7 +15,9 @@
       "types": "./dist/connect.d.ts"
     }
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "publishConfig": {
     "access": "public"
   },
@@ -31,8 +33,16 @@
     "typescript": "^5.7.0",
     "@types/node": "^22.0.0"
   },
-  "keywords": ["mcp", "identity", "auth", "jwt", "prior"],
-  "engines": { "node": ">=18" },
+  "keywords": [
+    "mcp",
+    "identity",
+    "auth",
+    "jwt",
+    "prior"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
