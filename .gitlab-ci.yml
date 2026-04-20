@@ -1,6 +1,5 @@
 stages:
   - test
-  - publish
 
 variables:
   NODE_VERSION: "22"
@@ -24,19 +23,6 @@ test:
     - if: $CI_PIPELINE_SOURCE == "push"
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
 
-# --- Publish to npm on version tags ---
-
-publish:
-  stage: publish
-  image: node:${NODE_VERSION}
-  script:
-    - npm ci
-    - npm run build
-    - npm test
-    - npm config set "//registry.npmjs.org/:_authToken" "${NPM_TOKEN}"
-    - npm publish --access public
-  rules:
-    - if: $CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+/
-  environment:
-    name: npm
-    url: https://www.npmjs.com/package/@cg3/prior-identity
+# npm publishing for this public package moved to GitHub Actions in the
+# canonical GitHub repo. Keep GitLab CI focused on verification for the
+# internal mirror to avoid duplicate publishes and split provenance.
