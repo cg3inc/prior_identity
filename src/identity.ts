@@ -40,6 +40,7 @@ export function createPriorIdentity(config: PriorIdentityConfig): PriorIdentityI
       const result = await jose.jwtVerify(token, jwks, {
         issuer,
         audience: augmentName,
+        algorithms: ["ES256"],
       });
       payload = result.payload;
     } catch (e) {
