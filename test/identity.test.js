@@ -1,3 +1,4 @@
+import { createServer } from "node:http";
 import { describe, it, before } from "node:test";
 import assert from "node:assert/strict";
 import * as jose from "jose";
@@ -25,6 +26,56 @@ async function createToken(claims = {}, options = {}) {
     .sign(privateKey);
 }
 
+async function withLocalOidcIssuer(options, fn) {
+  const pubJwk = options.keyPair ? await jose.exportJWK(options.keyPair.publicKey) : null;
+  if (pubJwk) {
+    pubJwk.kid = "local-test-key";
+    pubJwk.alg = "ES256";
+    pubJwk.use = "sig";
+  }
+
+  const server = createServer((req, res) => {
+    const baseUrl = `http://${req.headers.host}`;
+
+    if (req.url === "/.well-known/openid-configuration") {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({
+        issuer: baseUrl,
+        jwks_uri: `${baseUrl}/.well-known/jwks.json`,
+        authorization_endpoint: `${baseUrl}/authorize`,
+        token_endpoint: `${baseUrl}/token`,
+        userinfo_endpoint: `${baseUrl}/userinfo`,
+      }));
+      return;
+    }
+
+    if (req.url === "/.well-known/jwks.json" && pubJwk) {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ keys: [pubJwk] }));
+      return;
+    }
+
+    if (options.onRequest) {
+      options.onRequest(req, res, baseUrl);
+      return;
+    }
+
+    res.writeHead(404);
+    res.end();
+  });
+
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const { port } = server.address();
+
+  try {
+    return await fn(`http://127.0.0.1:${port}`);
+  } finally {
+    await new Promise((resolve, reject) => {
+      server.close((err) => (err ? reject(err) : resolve()));
+    });
+  }
+}
+
 describe("@cg3/prior-identity", () => {
   it("exports createPriorIdentity", async () => {
     const mod = await import("../dist/index.js");
@@ -33,30 +84,22 @@ describe("@cg3/prior-identity", () => {
 
   it("validate returns null for garbage token", async () => {
     const { createPriorIdentity } = await import("../dist/index.js");
-    const identity = createPriorIdentity({ augmentName: "codenotes" });
+    const identity = createPriorIdentity({ clientId: "codenotes" });
     const result = await identity.validate("not-a-jwt");
     assert.equal(result, null);
   });
 
-  it("validate returns null for token signed with unknown key (prod JWKS)", async () => {
+  it("validate returns null for token signed with unknown key", async () => {
     const { createPriorIdentity } = await import("../dist/index.js");
-    const identity = createPriorIdentity({ augmentName: "codenotes" });
+    const identity = createPriorIdentity({ clientId: "codenotes" });
     const token = await createToken();
-    const result = await identity.validate(token);
-    assert.equal(result, null);
-  });
-
-  it("validate returns null for non-identity token type", async () => {
-    const { createPriorIdentity } = await import("../dist/index.js");
-    const identity = createPriorIdentity({ augmentName: "codenotes" });
-    const token = await createToken({ type: "access" });
     const result = await identity.validate(token);
     assert.equal(result, null);
   });
 
   it("validateEnv returns null when env var not set", async () => {
     const { createPriorIdentity } = await import("../dist/index.js");
-    const identity = createPriorIdentity({ augmentName: "codenotes" });
+    const identity = createPriorIdentity({ clientId: "codenotes" });
     delete process.env.PRIOR_IDENTITY_TOKEN;
     const result = await identity.validateEnv();
     assert.equal(result, null);
@@ -65,7 +108,7 @@ describe("@cg3/prior-identity", () => {
   it("validateEnv reads from custom env var", async () => {
     const { createPriorIdentity } = await import("../dist/index.js");
     const identity = createPriorIdentity({
-      augmentName: "codenotes",
+      clientId: "codenotes",
       tokenEnvVar: "MY_CUSTOM_TOKEN",
     });
     delete process.env.MY_CUSTOM_TOKEN;
@@ -73,75 +116,174 @@ describe("@cg3/prior-identity", () => {
     assert.equal(result, null);
   });
 
-  it("clearCache does not throw and does not clear seenUsers", async () => {
+  it("clearCache does not throw", async () => {
     const { createPriorIdentity } = await import("../dist/index.js");
-    const identity = createPriorIdentity({ augmentName: "codenotes" });
+    const identity = createPriorIdentity({ clientId: "codenotes" });
     identity.clearCache();
   });
 
   it("getEmail returns null for invalid token", async () => {
     const { createPriorIdentity } = await import("../dist/index.js");
-    const identity = createPriorIdentity({ augmentName: "codenotes" });
+    const identity = createPriorIdentity({ clientId: "codenotes" });
     const result = await identity.getEmail("invalid-token");
     assert.equal(result, null);
   });
 
-  it("getEmail URL derives from configured issuer", async () => {
-    // This test verifies the URL is constructed correctly by checking
-    // that a custom issuer doesn't hit the default api.cg3.io
-    const { createPriorIdentity } = await import("../dist/index.js");
-    const identity = createPriorIdentity({
-      augmentName: "test",
-      issuer: "https://custom.example.com",
+  it("getUserInfo and getEmail use the discovered userinfo endpoint", async () => {
+    await withLocalOidcIssuer({
+      onRequest(req, res) {
+        if (req.url === "/userinfo") {
+          res.writeHead(200, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({
+            sub: "account-123",
+            name: "Alice",
+            email: "alice@example.com",
+            email_verified: true,
+          }));
+          return;
+        }
+        res.writeHead(404);
+        res.end();
+      },
+    }, async (issuer) => {
+      const { createPriorIdentity } = await import("../dist/index.js");
+      const identity = createPriorIdentity({
+        clientId: "codenotes",
+        issuer,
+      });
+
+      const info = await identity.getUserInfo("userinfo-token");
+      assert.deepEqual(info, {
+        sub: "account-123",
+        name: "Alice",
+        email: "alice@example.com",
+        email_verified: true,
+      });
+
+      const email = await identity.getEmail("userinfo-token");
+      assert.equal(email, "alice@example.com");
     });
-    // getEmail with an invalid token against a nonexistent host — returns null (not crash)
-    const result = await identity.getEmail("fake-token");
-    assert.equal(result, null);
   });
 });
 
-describe("validate with local JWKS", () => {
-  // These tests use jose.createLocalJWKSet to test the happy path
-  // without needing a network connection
-
-  it("validates a correct identity token", async () => {
+describe("validate with local issuer metadata", () => {
+  it("derives JWKS from the configured issuer when jwksUrl is omitted", async () => {
     const kp = await jose.generateKeyPair("ES256");
-    const pubJwk = await jose.exportJWK(kp.publicKey);
-    pubJwk.kid = "local-test-key";
-    pubJwk.alg = "ES256";
-    pubJwk.use = "sig";
 
-    // We need to intercept the JWKS fetch. Since we can't easily mock
-    // jose.createRemoteJWKSet, we test the validation logic by verifying
-    // that tokens with wrong claims are correctly rejected even with
-    // a matching key. The full happy-path test requires a running JWKS
-    // endpoint (covered by the E2E test in the CodeNotes flow).
+    await withLocalOidcIssuer({ keyPair: kp }, async (issuer) => {
+      const token = await new jose.SignJWT({
+        name: "Issuer Alice",
+        scope: "identity:read",
+        type: "access",
+      })
+        .setProtectedHeader({ alg: "ES256", kid: "local-test-key" })
+        .setIssuer(issuer)
+        .setSubject("account-issuer")
+        .setJti("jti-issuer")
+        .setAudience("codenotes")
+        .setExpirationTime("1h")
+        .sign(kp.privateKey);
 
-    // Instead, verify the PriorUser shape from the types
-    const { createPriorIdentity } = await import("../dist/index.js");
-    assert.ok(createPriorIdentity);
+      const { createPriorIdentity } = await import("../dist/index.js");
+      const identity = createPriorIdentity({ clientId: "codenotes", issuer });
+      const result = await identity.validate(token);
+      assert.deepEqual(result, {
+        accountId: "account-issuer",
+        displayName: "Issuer Alice",
+        audience: "codenotes",
+        jti: "jti-issuer",
+      });
+    });
   });
 
-  it("onNewUser receives token as second argument (type check)", async () => {
+  it("validates a delegated access token with identity:read scope", async () => {
+    const kp = await jose.generateKeyPair("ES256");
+    const token = await new jose.SignJWT({
+      name: "Delegated Alice",
+      scope: "identity:read",
+      type: "access",
+    })
+      .setProtectedHeader({ alg: "ES256", kid: "local-test-key" })
+      .setIssuer("https://api.cg3.io")
+      .setSubject("account-456")
+      .setJti("jti-delegated")
+      .setAudience("codenotes")
+      .setExpirationTime("1h")
+      .sign(kp.privateKey);
+
+    await withLocalOidcIssuer({ keyPair: kp }, async (issuer) => {
+      const { createPriorIdentity } = await import("../dist/index.js");
+      const identity = createPriorIdentity({ clientId: "codenotes", jwksUrl: `${issuer}/.well-known/jwks.json` });
+      const result = await identity.validate(token);
+      assert.deepEqual(result, {
+        accountId: "account-456",
+        displayName: "Delegated Alice",
+        audience: "codenotes",
+        jti: "jti-delegated",
+      });
+    });
+  });
+
+  it("rejects delegated access token without identity:read scope", async () => {
+    const kp = await jose.generateKeyPair("ES256");
+    const token = await new jose.SignJWT({
+      name: "Delegated Alice",
+      scope: "profile",
+      type: "access",
+    })
+      .setProtectedHeader({ alg: "ES256", kid: "local-test-key" })
+      .setIssuer("https://api.cg3.io")
+      .setSubject("account-456")
+      .setJti("jti-delegated-missing-scope")
+      .setAudience("codenotes")
+      .setExpirationTime("1h")
+      .sign(kp.privateKey);
+
+    await withLocalOidcIssuer({ keyPair: kp }, async (issuer) => {
+      const { createPriorIdentity } = await import("../dist/index.js");
+      const identity = createPriorIdentity({ clientId: "codenotes", jwksUrl: `${issuer}/.well-known/jwks.json` });
+      const result = await identity.validate(token);
+      assert.equal(result, null);
+    });
+  });
+
+  it("keeps augmentName as a backward-compatible alias for clientId", async () => {
+    const kp = await jose.generateKeyPair("ES256");
+    const token = await new jose.SignJWT({
+      name: "Alias Alice",
+      scope: "identity:read",
+      type: "access",
+    })
+      .setProtectedHeader({ alg: "ES256", kid: "local-test-key" })
+      .setIssuer("https://api.cg3.io")
+      .setSubject("account-alias")
+      .setJti("jti-alias")
+      .setAudience("codenotes")
+      .setExpirationTime("1h")
+      .sign(kp.privateKey);
+
+    await withLocalOidcIssuer({ keyPair: kp }, async (issuer) => {
+      const { createPriorIdentity } = await import("../dist/index.js");
+      const identity = createPriorIdentity({ augmentName: "codenotes", jwksUrl: `${issuer}/.well-known/jwks.json` });
+      const result = await identity.validate(token);
+      assert.equal(result?.accountId, "account-alias");
+    });
+  });
+
+  it("onNewUser receives token as second argument", async () => {
     const { createPriorIdentity } = await import("../dist/index.js");
-    let receivedToken = null;
     const identity = createPriorIdentity({
-      augmentName: "test",
+      clientId: "test",
       onNewUser: async (_user, token) => {
-        receivedToken = token;
+        assert.equal(typeof token, "string");
       },
     });
-    // Can't fully test without a matching JWKS, but verify the callback signature
-    // is accepted by TypeScript (compile-time check) and the function exists
     assert.ok(typeof identity.validate === "function");
   });
 
   it("validate rejects token with missing sub claim", async () => {
-    // Tokens without sub should return null (not crash with undefined)
     const { createPriorIdentity } = await import("../dist/index.js");
-    const identity = createPriorIdentity({ augmentName: "codenotes" });
-    // A token from an unknown key will fail at verification before claim checks,
-    // but this validates the code path doesn't crash
+    const identity = createPriorIdentity({ clientId: "codenotes" });
     const token = await createToken({ sub: undefined });
     const result = await identity.validate(token);
     assert.equal(result, null);

@@ -41,7 +41,7 @@ function authenticateByApiKey(apiKey: string): User | null {
 // ── Prior Identity setup (3 lines) ────────────────────────────
 
 const identity = createPriorIdentity({
-  augmentName: "task-tracker",
+  clientId: "task-tracker",
 
   // Called on first visit from a new Prior Identity user.
   // The raw token is provided so you can call getEmail() for account linking.

@@ -9,7 +9,7 @@ import { createPriorIdentity } from "@cg3/prior-identity";
 
 // ── Setup (3 lines) ───────────────────────────────────────────
 
-const identity = createPriorIdentity({ augmentName: "my-tool" });
+const identity = createPriorIdentity({ clientId: "my-tool" });
 
 // ── HTTP handler ──────────────────────────────────────────────
 
@@ -44,7 +44,7 @@ async function startStdio() {
  * TOTAL INTEGRATION COST:
  *
  * - 1 npm dependency: @cg3/prior-identity
- * - 1 line: createPriorIdentity({ augmentName: "my-tool" })
+ * - 1 line: createPriorIdentity({ clientId: "my-tool" })
  * - 1 line: await identity.validate(token)  — or validateEnv() for stdio
  * - 0 signup pages, 0 API key management, 0 OAuth configuration
  *

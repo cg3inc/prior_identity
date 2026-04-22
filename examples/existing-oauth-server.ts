@@ -49,7 +49,7 @@ async function verifyGoogleToken(token: string): Promise<{ googleId: string; ema
 // ── Prior Identity setup ──────────────────────────────────────
 
 const identity = createPriorIdentity({
-  augmentName: "docs-search",
+  clientId: "docs-search",
 
   onNewUser: async (priorUser, token) => {
     // Try to link to an existing user by email

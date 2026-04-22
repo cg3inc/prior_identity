@@ -4,10 +4,10 @@
  * Subpath export: import { connectInteractive } from "@cg3/prior-identity/connect"
  *
  * Resolution order:
- * 1. Check persisted token in ~/.prior/identity/{augmentName}.json
+ * 1. Check persisted token in ~/.prior/identity/{clientId}.json
  * 2. If expired or missing, open browser for login + consent
  * 3. Receive authorization code via localhost callback
- * 4. Exchange code for identity token via PKCE
+ * 4. Exchange code for delegated access token via PKCE
  * 5. Persist token for next startup
  */
 
@@ -19,40 +19,55 @@ import * as os from "node:os";
 import * as childProcess from "node:child_process";
 import type { PriorIdentityConfig, PriorUser } from "./types.js";
 
-const DEFAULT_CONNECT_URL = "https://prior.cg3.io/identity/connect";
-const DEFAULT_EXCHANGE_URL = "https://api.cg3.io/v1/identity/exchange";
 const DEFAULT_TIMEOUT = 180_000; // 3 minutes
+
+interface OidcDiscoveryDocument {
+  authorization_endpoint?: string;
+  token_endpoint?: string;
+}
 
 export interface ConnectInteractiveOptions {
   timeout?: number;
+  authorizeUrl?: string;
+  tokenUrl?: string;
+  /** @deprecated Use authorizeUrl. */
   connectUrl?: string;
+  /** @deprecated Use tokenUrl. */
   exchangeUrl?: string;
   headless?: boolean;
   onUrl?: (url: string) => void;
 }
 
 interface PersistedToken {
-  augmentName: string;
-  identityToken: string;
+  clientId: string;
+  accessToken?: string;
+  /** @deprecated Legacy persisted field name. */
+  identityToken?: string;
   accountId: string;
   displayName: string;
   issuedAt: string;
   expiresAt: string;
 }
 
-// ── Token Persistence ──────────────────────────────────────
+function resolveClientId(config: PriorIdentityConfig): string {
+  const clientId = config.clientId ?? config.augmentName;
+  if (!clientId) {
+    throw new Error("connectInteractive requires clientId (or legacy augmentName)");
+  }
+  return clientId;
+}
 
 function getTokenDir(): string {
   return path.join(os.homedir(), ".prior", "identity");
 }
 
-function getTokenPath(augmentName: string): string {
-  return path.join(getTokenDir(), `${augmentName}.json`);
+function getTokenPath(clientId: string): string {
+  return path.join(getTokenDir(), `${clientId}.json`);
 }
 
-function readPersistedToken(augmentName: string): PersistedToken | null {
+function readPersistedToken(clientId: string): PersistedToken | null {
   try {
-    const raw = fs.readFileSync(getTokenPath(augmentName), "utf-8");
+    const raw = fs.readFileSync(getTokenPath(clientId), "utf-8");
     return JSON.parse(raw);
   } catch {
     return null;
@@ -64,11 +79,10 @@ function writePersistedToken(token: PersistedToken): void {
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
   }
-  const filePath = getTokenPath(token.augmentName);
+  const filePath = getTokenPath(token.clientId);
   fs.writeFileSync(filePath, JSON.stringify(token, null, 2));
   try { fs.chmodSync(filePath, 0o600); } catch { /* Windows */ }
 
-  // Ensure .gitignore exists
   const gitignorePath = path.join(dir, ".gitignore");
   if (!fs.existsSync(gitignorePath)) {
     try { fs.writeFileSync(gitignorePath, "*\n"); } catch { /* best effort */ }
@@ -83,7 +97,9 @@ function isTokenExpired(token: PersistedToken): boolean {
   }
 }
 
-// ── PKCE ───────────────────────────────────────────────────
+function readPersistedAccessToken(token: PersistedToken): string | null {
+  return token.accessToken || token.identityToken || null;
+}
 
 function generateCodeVerifier(): string {
   return crypto.randomBytes(32).toString("base64url");
@@ -92,8 +108,6 @@ function generateCodeVerifier(): string {
 function generateCodeChallenge(verifier: string): string {
   return crypto.createHash("sha256").update(verifier).digest("base64url");
 }
-
-// ── Browser Open ───────────────────────────────────────────
 
 function openBrowser(url: string): void {
   const platform = process.platform;
@@ -106,11 +120,9 @@ function openBrowser(url: string): void {
       childProcess.execSync(`xdg-open "${url}"`, { stdio: "ignore" });
     }
   } catch {
-    // Browser open failed — headless fallback handled by caller
+    // Browser open failed - headless fallback handled by caller.
   }
 }
-
-// ── JWT Decode (no verification — just to read claims for persistence) ──
 
 function decodeJwtPayload(token: string): Record<string, unknown> | null {
   const parts = token.split(".");
@@ -123,42 +135,60 @@ function decodeJwtPayload(token: string): Record<string, unknown> | null {
   }
 }
 
-// ── Connect Interactive ────────────────────────────────────
+async function loadDiscovery(config: PriorIdentityConfig): Promise<OidcDiscoveryDocument | null> {
+  const issuer = config.issuer || "https://api.cg3.io";
+  const discoveryUrl = config.discoveryUrl || new URL("/.well-known/openid-configuration", issuer).toString();
+
+  try {
+    const res = await fetch(discoveryUrl, {
+      signal: AbortSignal.timeout(5_000),
+    });
+    if (!res.ok) return null;
+    return await res.json() as OidcDiscoveryDocument;
+  } catch {
+    return null;
+  }
+}
 
 export async function connectInteractive(
   config: PriorIdentityConfig,
   validateFn: (token: string) => Promise<PriorUser | null>,
   options: ConnectInteractiveOptions = {},
 ): Promise<PriorUser | null> {
+  const issuer = config.issuer || "https://api.cg3.io";
+  const discovery = await loadDiscovery(config);
   const {
     timeout = DEFAULT_TIMEOUT,
-    connectUrl = DEFAULT_CONNECT_URL,
-    exchangeUrl = options.exchangeUrl || `${config.issuer || "https://api.cg3.io"}/v1/identity/exchange`,
+    authorizeUrl = options.authorizeUrl
+      || options.connectUrl
+      || discovery?.authorization_endpoint
+      || new URL("/authorize", issuer).toString(),
+    tokenUrl = options.tokenUrl
+      || options.exchangeUrl
+      || discovery?.token_endpoint
+      || new URL("/token", issuer).toString(),
     headless = false,
     onUrl,
   } = options;
 
-  const augmentName = config.augmentName;
+  const clientId = resolveClientId(config);
 
-  // Validate augmentName before using as filename
-  if (!/^[a-zA-Z0-9_-]+$/.test(augmentName) || augmentName.length > 64) {
-    logDebug(`Invalid augmentName: "${augmentName}"`);
+  if (!/^[a-zA-Z0-9_-]+$/.test(clientId) || clientId.length > 64) {
+    logDebug(`Invalid clientId: "${clientId}"`);
     return null;
   }
 
-  // 1. Check persisted token
-  const persisted = readPersistedToken(augmentName);
+  const persisted = readPersistedToken(clientId);
   if (persisted && !isTokenExpired(persisted)) {
-    const user = await validateFn(persisted.identityToken);
+    const accessToken = readPersistedAccessToken(persisted);
+    const user = accessToken ? await validateFn(accessToken) : null;
     if (user) {
-      logDebug(`Using persisted token for "${augmentName}"`);
+      logDebug(`Using persisted token for "${clientId}"`);
       return user;
     }
-    // Token invalid (revoked, key rotated) — fall through to browser flow
   }
 
-  // 2. Browser flow
-  logDebug(`Starting interactive connect for "${augmentName}"`);
+  logDebug(`Starting interactive connect for "${clientId}"`);
 
   const state = crypto.randomBytes(16).toString("hex");
   const codeVerifier = generateCodeVerifier();
@@ -174,9 +204,7 @@ export async function connectInteractive(
       try { server.close(); } catch { /* already closed */ }
     };
 
-    // Start localhost callback server
     const server = http.createServer(async (req, res) => {
-      // Only accept requests to /callback
       if (!req.url?.startsWith("/callback")) {
         res.writeHead(404);
         res.end();
@@ -188,7 +216,6 @@ export async function connectInteractive(
       const code = url.searchParams.get("code");
       const error = url.searchParams.get("error");
 
-      // Validate state
       if (returnedState !== state) {
         res.writeHead(403, { "Content-Type": "text/html", "Referrer-Policy": "no-referrer", "Cache-Control": "no-store" });
         res.end("<html><body><h1>Invalid state parameter</h1><p>This request may have been tampered with.</p></body></html>");
@@ -208,29 +235,30 @@ export async function connectInteractive(
         return;
       }
 
-      // Exchange code for identity token
       try {
-        const exchangeRes = await fetch(exchangeUrl, {
+        const exchangeRes = await fetch(tokenUrl, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: new URLSearchParams({
+            grant_type: "authorization_code",
             code,
-            codeVerifier,
-            redirectUri: `http://127.0.0.1:${(server.address() as any).port}/callback`,
-          }),
+            code_verifier: codeVerifier,
+            redirect_uri: `http://127.0.0.1:${(server.address() as { port: number }).port}/callback`,
+            client_id: clientId,
+          }).toString(),
           signal: AbortSignal.timeout(10_000),
         });
 
-        const body = await exchangeRes.json() as any;
-        if (!body.ok || !body.data?.token) {
+        const body = await exchangeRes.json() as { access_token?: string; error_description?: string; error?: string };
+        if (!body.access_token) {
           res.writeHead(200, { "Content-Type": "text/html", "Referrer-Policy": "no-referrer", "Cache-Control": "no-store" });
-          res.end(`<html><body><h1>Connection failed</h1><p>${escapeHtml(body.error?.message || "Unknown error")}</p></body></html>`);
+          res.end(`<html><body><h1>Connection failed</h1><p>${escapeHtml(body.error_description || body.error || "Unknown error")}</p></body></html>`);
           cleanup();
           return;
         }
 
-        const identityToken = body.data.token;
-        const user = await validateFn(identityToken);
+        const accessToken = body.access_token;
+        const user = await validateFn(accessToken);
 
         if (!user) {
           res.writeHead(200, { "Content-Type": "text/html", "Referrer-Policy": "no-referrer", "Cache-Control": "no-store" });
@@ -239,18 +267,16 @@ export async function connectInteractive(
           return;
         }
 
-        // Persist token
-        const claims = decodeJwtPayload(identityToken);
+        const claims = decodeJwtPayload(accessToken);
         writePersistedToken({
-          augmentName,
-          identityToken,
+          clientId,
+          accessToken,
           accountId: user.accountId,
           displayName: user.displayName,
           issuedAt: new Date().toISOString(),
           expiresAt: claims?.exp ? new Date((claims.exp as number) * 1000).toISOString() : "",
         });
 
-        // Success page
         res.writeHead(200, { "Content-Type": "text/html", "Referrer-Policy": "no-referrer", "Cache-Control": "no-store" });
         res.end(`<html><body><h1>Connected!</h1><p>Authenticated as <strong>${escapeHtml(user.displayName)}</strong>.</p><p>You can close this tab.</p><script>setTimeout(()=>window.close(),2000)</script></body></html>`);
 
@@ -264,17 +290,18 @@ export async function connectInteractive(
       }
     });
 
-    // Bind to loopback only, OS-assigned port
     server.listen(0, "127.0.0.1", () => {
       const addr = server.address() as { port: number };
       const redirectUri = `http://127.0.0.1:${addr.port}/callback`;
 
-      const connectFullUrl = `${connectUrl}?` + new URLSearchParams({
-        augment: augmentName,
+      const connectFullUrl = `${authorizeUrl}?` + new URLSearchParams({
+        response_type: "code",
+        client_id: clientId,
         redirect_uri: redirectUri,
         state,
         code_challenge: codeChallenge,
         code_challenge_method: "S256",
+        scope: "identity:read",
       }).toString();
 
       logDebug(`Listening on ${redirectUri}`);
@@ -287,11 +314,9 @@ export async function connectInteractive(
         openBrowser(connectFullUrl);
       }
 
-      // Always print URL to stderr (for headless fallback / debugging)
       process.stderr.write(`[prior-identity] To connect, visit: ${connectFullUrl}\n`);
     });
 
-    // Timeout
     setTimeout(() => {
       if (!resolved) {
         logDebug(`Connect timed out after ${timeout}ms`);
