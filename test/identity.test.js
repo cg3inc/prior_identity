@@ -253,17 +253,17 @@ describe("validate with local issuer metadata", () => {
     });
   });
 
-  it("rejects legacy identity tokens after the Phase 6 cutover", async () => {
+  it("rejects tokens with unsupported type claims", async () => {
     const kp = await jose.generateKeyPair("ES256");
     const token = await new jose.SignJWT({
-      name: "Legacy Alice",
+      name: "Unsupported Alice",
       scope: "identity:read",
       type: "identity",
     })
       .setProtectedHeader({ alg: "ES256", kid: "local-test-key" })
       .setIssuer("https://api.cg3.io")
-      .setSubject("legacy-account")
-      .setJti("legacy-jti")
+      .setSubject("unsupported-account")
+      .setJti("unsupported-jti")
       .setAudience("codenotes")
       .setExpirationTime("1h")
       .sign(kp.privateKey);

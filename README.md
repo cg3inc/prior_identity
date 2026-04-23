@@ -223,9 +223,6 @@ const identity = createPriorIdentity({
 - Supported interactive delegated flow: `/authorize` + `/token` + `/userinfo`
 - Supported local validation contract: ES256 delegated `type="access"` token with `scope` containing `identity:read`
 - This SDK uses `clientId`, `user.subject`, `authorizeUrl`, `tokenUrl`, and `PRIOR_ACCESS_TOKEN`
-- Legacy delegated-auth surfaces such as `POST /v1/identity/connect`, `POST /v1/identity/exchange`, and `POST /v1/identity/token` are not part of this SDK's supported integration path
-
-Publisher migration guide and legacy replacement map: [PUBLISHER_MIGRATION.md](./PUBLISHER_MIGRATION.md)
 
 ## Reliability and exit cost
 
