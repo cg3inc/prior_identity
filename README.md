@@ -11,12 +11,10 @@ import { createPriorIdentity } from "@cg3/prior-identity";
 
 const identity = createPriorIdentity({ clientId: "my-tool" });
 const user = await identity.validate(bearerToken);
-// user = { subject: "tool-scoped subject", accountId: "tool-scoped subject", displayName: "Alice" }
+// user = { subject: "tool-scoped subject", displayName: "Alice" }
 ```
 
-`clientId` is the preferred config name. `augmentName` is still accepted as a backward-compatible alias during the rollout.
-
-Important: the delegated user identifier is pairwise per relying party. `user.subject` is stable for your tool only and must not be used to correlate the same human across different tools. `user.accountId` remains as a compatibility alias for that same opaque subject during the Phase 4 migration window.
+Important: the delegated user identifier is pairwise per relying party. `user.subject` is stable for your tool only and must not be used to correlate the same human across different tools.
 
 ## Install
 
@@ -80,7 +78,7 @@ User installs via Equip          User installs manually
              Local JWT verification
              (ES256, cached JWKS)
                        |
-             { accountId, displayName }
+             { subject, displayName }
 ```
 
 Tokens are audience-bound. A token issued for `"bookmarks"` is rejected by a server configured as `"code-formatter"`.
@@ -94,27 +92,28 @@ Verification is local. The SDK caches Prior's JWKS and does not make a network r
 | Option | Type | Default | Description |
 | --- | --- | --- | --- |
 | `clientId` | `string` | required | Your OIDC client / relying-party id. Must match token `aud`. |
-| `augmentName` | `string` | -- | Deprecated alias for `clientId`. |
 | `issuer` | `string` | `https://api.cg3.io` | Expected issuer claim and base for discovery defaults. |
 | `discoveryUrl` | `string` | `{issuer}/.well-known/openid-configuration` | Optional override for OIDC discovery. |
 | `jwksUrl` | `string` | `{issuer}/.well-known/jwks.json` | Optional override for JWKS verification. |
 | `userinfoUrl` | `string` | discovered or `{issuer}/userinfo` | Optional override for OIDC UserInfo. |
-| `tokenEnvVar` | `string` | `PRIOR_IDENTITY_TOKEN` | Env var for stdio token validation. Historical name; the supported token is an OIDC delegated access token. |
+| `tokenEnvVar` | `string` | `PRIOR_ACCESS_TOKEN` | Env var for stdio token validation. |
 | `onNewUser` | `(user, token) => Promise<void>` | -- | Called on first visit from a new delegated subject. |
 | `resolveUser` | `(subject) => Promise<unknown>` | -- | Return truthy to skip `onNewUser` for known users. |
 
 ### `identity.validate(token): Promise<PriorUser | null>`
 
-Validates a bearer token locally with cached JWKS. During rollout it accepts both:
+Validates a delegated bearer token locally with cached JWKS.
 
-- legacy `type="identity"` tokens
-- delegated `type="access"` tokens that include `identity:read`
+Required token contract:
+
+- `type="access"`
+- `scope` containing `identity:read`
 
 Returns `null` for invalid, expired, wrong-audience, wrong-issuer, or unsupported tokens.
 
 ### `identity.validateEnv(): Promise<PriorUser | null>`
 
-Reads the token from `PRIOR_IDENTITY_TOKEN` (or your custom env var) and validates it once.
+Reads the token from `PRIOR_ACCESS_TOKEN` (or your custom env var) and validates it once.
 
 ### `identity.getUserInfo(token): Promise<PriorUserInfo | null>`
 
@@ -152,8 +151,6 @@ Options:
   timeout?: number;
   authorizeUrl?: string;
   tokenUrl?: string;
-  connectUrl?: string;   // deprecated alias for authorizeUrl
-  exchangeUrl?: string;  // deprecated alias for tokenUrl
   headless?: boolean;
   onUrl?: (url: string) => void;
 }
@@ -164,7 +161,6 @@ Options:
 ```typescript
 interface PriorUser {
   subject: string;     // Preferred field for the pairwise delegated subject.
-  accountId: string;   // Compatibility alias for subject during migration.
   displayName: string; // Human-readable and mutable.
   audience: string;    // The relying party / client id from `aud`.
   jti: string;         // Unique token id.
@@ -179,7 +175,7 @@ Every `validate()` call checks:
 - `iss`
 - `aud`
 - `exp`
-- token family (`identity` legacy token or delegated `access` token with `identity:read`)
+- delegated access-token family (`type="access"` with `identity:read`)
 - required `sub` and `jti`
 
 All of that is local.
@@ -222,11 +218,11 @@ const identity = createPriorIdentity({
 
 ## Migration and cutover
 
-Use the OIDC path for all new integrations as of April 22, 2026.
+As of April 22, 2026, the Phase 6 cutover is complete for this SDK surface.
 
 - Supported interactive delegated flow: `/authorize` + `/token` + `/userinfo`
 - Supported local validation contract: ES256 delegated `type="access"` token with `scope` containing `identity:read`
-- Compatibility only during the Phase 4 migration window: legacy `type="identity"` token acceptance and the `accountId` field name
+- Removed in Phase 6: legacy `type="identity"` token acceptance, `augmentName`, `accountId`, `connectUrl`, `exchangeUrl`, and `PRIOR_IDENTITY_TOKEN`
 - Do not build new integrations on `POST /v1/identity/connect`, `POST /v1/identity/exchange`, or `POST /v1/identity/token`
 
 Publisher migration guide and legacy replacement map: [PUBLISHER_MIGRATION.md](./PUBLISHER_MIGRATION.md)
@@ -249,5 +245,3 @@ Exit cost stays low because the integration is standard JWT validation plus OIDC
 - `jti`
 - `type: "access"` with `scope` containing `identity:read`
 - optional profile claims such as `name`
-
-During rollout the SDK still accepts the older `type="identity"` token family, but the supported delegated contract is OIDC access tokens.

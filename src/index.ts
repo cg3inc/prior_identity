@@ -4,12 +4,12 @@
  * Usage (HTTP):
  *   const identity = createPriorIdentity({ clientId: "my-tool" });
  *   const user = await identity.validate(bearerToken);
- *   // user = { subject: "opaque-subject", accountId: "opaque-subject", displayName: "Alice" }
+ *   // user = { subject: "opaque-subject", displayName: "Alice" }
  *
  * Usage (stdio):
  *   const identity = createPriorIdentity({ clientId: "my-tool" });
  *   const user = await identity.validateEnv();
- *   // reads PRIOR_IDENTITY_TOKEN from env, validates once
+ *   // reads PRIOR_ACCESS_TOKEN from env, validates once
  */
 
 export { createPriorIdentity } from "./identity.js";

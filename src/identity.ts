@@ -2,7 +2,7 @@ import * as jose from "jose";
 import type { PriorIdentityConfig, PriorIdentityInstance, PriorUser, PriorUserInfo } from "./types.js";
 
 const DEFAULT_ISSUER = "https://api.cg3.io";
-const DEFAULT_TOKEN_ENV_VAR = "PRIOR_IDENTITY_TOKEN";
+const DEFAULT_TOKEN_ENV_VAR = "PRIOR_ACCESS_TOKEN";
 
 interface OidcDiscoveryDocument {
   authorization_endpoint?: string;
@@ -12,11 +12,10 @@ interface OidcDiscoveryDocument {
 }
 
 function resolveClientId(config: PriorIdentityConfig): string {
-  const clientId = config.clientId ?? config.augmentName;
-  if (!clientId) {
-    throw new Error("createPriorIdentity requires clientId (or legacy augmentName)");
+  if (!config.clientId) {
+    throw new Error("createPriorIdentity requires clientId");
   }
-  return clientId;
+  return config.clientId;
 }
 
 /**
@@ -90,18 +89,15 @@ export function createPriorIdentity(config: PriorIdentityConfig): PriorIdentityI
       return null;
     }
 
-    // Accept both the legacy Prior Identity token and the Phase 3 delegated access token.
     const payloadType = typeof payload.type === "string" ? payload.type : "";
-    if (payloadType !== "identity" && payloadType !== "access") {
+    if (payloadType !== "access") {
       logDebug(`Token rejected: type "${payload.type}" is not supported`);
       return null;
     }
-    if (payloadType === "access") {
-      const scopeClaim = typeof payload.scope === "string" ? payload.scope : "";
-      if (!scopeClaim.split(" ").includes("identity:read")) {
-        logDebug("Token rejected: delegated access token missing identity:read scope");
-        return null;
-      }
+    const scopeClaim = typeof payload.scope === "string" ? payload.scope : "";
+    if (!scopeClaim.split(" ").includes("identity:read")) {
+      logDebug("Token rejected: delegated access token missing identity:read scope");
+      return null;
     }
     if (!payload.sub) {
       logDebug('Token rejected: missing "sub" claim');
@@ -114,7 +110,6 @@ export function createPriorIdentity(config: PriorIdentityConfig): PriorIdentityI
 
     const user: PriorUser = {
       subject: payload.sub,
-      accountId: payload.sub,
       displayName: (payload.name as string) || "User",
       audience: clientId,
       jti: payload.jti,
@@ -176,8 +171,6 @@ export function createPriorIdentity(config: PriorIdentityConfig): PriorIdentityI
     timeout?: number;
     authorizeUrl?: string;
     tokenUrl?: string;
-    connectUrl?: string;
-    exchangeUrl?: string;
     headless?: boolean;
     onUrl?: (url: string) => void;
   }): Promise<PriorUser | null> {

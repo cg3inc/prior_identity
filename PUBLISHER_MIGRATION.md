@@ -5,9 +5,7 @@ This guide is for publishers moving from the legacy Prior Identity delegated-aut
 ## Timeline
 
 - **April 22, 2026:** Phase 4 launch. The supported interactive delegated-auth path is OIDC.
-- **Phase 4 migration window:** legacy `type="identity"` validation and compatibility aliases remain available only to reduce publisher cutover risk.
-- **Before Phase 6 starts:** CG3 will confirm there are no known active publishers still depending on removed legacy paths.
-- **Phase 6 hard removal date:** not published yet. Do not build new integrations on the legacy protocol.
+- **April 22, 2026:** Phase 6 cutover. Legacy Prior Identity protocol compatibility has been removed from the maintained CG3 SDK/client surfaces.
 
 ## Use this for new integrations
 
@@ -33,8 +31,17 @@ If you use `@cg3/prior-identity`, the SDK handles discovery, JWKS validation, `c
 
 - The delegated identifier is now pairwise per relying party.
 - In `@cg3/prior-identity`, prefer `user.subject` for new storage.
-- `user.accountId` remains as a compatibility alias during the migration window.
 - Do not use the delegated subject to correlate the same human across different tools.
+
+## Removed in the cutover
+
+- legacy `type="identity"` token validation
+- `augmentName` config alias
+- `user.accountId` compatibility alias
+- `connectUrl` / `exchangeUrl` option aliases
+- `PRIOR_IDENTITY_TOKEN` as the default stdio env-var name
+
+Use `clientId`, `user.subject`, `authorizeUrl`, `tokenUrl`, and `PRIOR_ACCESS_TOKEN`.
 
 ## What stays API-key-based
 

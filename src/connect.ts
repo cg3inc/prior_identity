@@ -30,33 +30,24 @@ export interface ConnectInteractiveOptions {
   timeout?: number;
   authorizeUrl?: string;
   tokenUrl?: string;
-  /** @deprecated Use authorizeUrl. */
-  connectUrl?: string;
-  /** @deprecated Use tokenUrl. */
-  exchangeUrl?: string;
   headless?: boolean;
   onUrl?: (url: string) => void;
 }
 
 interface PersistedToken {
   clientId: string;
-  accessToken?: string;
-  /** @deprecated Legacy persisted field name. */
-  identityToken?: string;
+  accessToken: string;
   subject?: string;
-  /** @deprecated Use subject. */
-  accountId: string;
   displayName: string;
   issuedAt: string;
   expiresAt: string;
 }
 
 function resolveClientId(config: PriorIdentityConfig): string {
-  const clientId = config.clientId ?? config.augmentName;
-  if (!clientId) {
-    throw new Error("connectInteractive requires clientId (or legacy augmentName)");
+  if (!config.clientId) {
+    throw new Error("connectInteractive requires clientId");
   }
-  return clientId;
+  return config.clientId;
 }
 
 function getTokenDir(): string {
@@ -100,7 +91,7 @@ function isTokenExpired(token: PersistedToken): boolean {
 }
 
 function readPersistedAccessToken(token: PersistedToken): string | null {
-  return token.accessToken || token.identityToken || null;
+  return token.accessToken || null;
 }
 
 function generateCodeVerifier(): string {
@@ -162,11 +153,9 @@ export async function connectInteractive(
   const {
     timeout = DEFAULT_TIMEOUT,
     authorizeUrl = options.authorizeUrl
-      || options.connectUrl
       || discovery?.authorization_endpoint
       || new URL("/authorize", issuer).toString(),
     tokenUrl = options.tokenUrl
-      || options.exchangeUrl
       || discovery?.token_endpoint
       || new URL("/token", issuer).toString(),
     headless = false,
@@ -274,7 +263,6 @@ export async function connectInteractive(
           clientId,
           accessToken,
           subject: user.subject,
-          accountId: user.accountId,
           displayName: user.displayName,
           issuedAt: new Date().toISOString(),
           expiresAt: claims?.exp ? new Date((claims.exp as number) * 1000).toISOString() : "",

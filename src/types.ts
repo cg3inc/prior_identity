@@ -11,7 +11,7 @@ interface PriorIdentityBaseConfig {
   /** OIDC UserInfo endpoint URL. Default: discovered from OIDC metadata or {issuer}/userinfo */
   userinfoUrl?: string;
 
-  /** Env var name for stdio token. Default: PRIOR_IDENTITY_TOKEN */
+  /** Env var name for stdio token. Default: PRIOR_ACCESS_TOKEN */
   tokenEnvVar?: string;
 
   /**
@@ -29,23 +29,12 @@ interface PriorIdentityBaseConfig {
 }
 
 /**
- * Configuration for Prior Identity validation.
- *
- * `clientId` is the OIDC term for the relying party. `augmentName` remains
- * accepted as a backward-compatible alias during the Phase 4 migration window.
+ * Configuration for the OIDC relying party.
  */
-export type PriorIdentityConfig =
-  | (PriorIdentityBaseConfig & {
-      /** Your OIDC client / relying-party id. Must match the token `aud` claim. */
-      clientId: string;
-      /** @deprecated Use clientId. */
-      augmentName?: string;
-    })
-  | (PriorIdentityBaseConfig & {
-      /** @deprecated Use clientId. */
-      augmentName: string;
-      clientId?: string;
-    });
+export type PriorIdentityConfig = PriorIdentityBaseConfig & {
+  /** Your OIDC client / relying-party id. Must match the token `aud` claim. */
+  clientId: string;
+};
 
 /**
  * A validated Prior Identity user.
@@ -53,10 +42,6 @@ export type PriorIdentityConfig =
 export interface PriorUser {
   /** Stable delegated subject for your tool. Treat as opaque; do not assume UUID format. */
   subject: string;
-
-  /** Stable delegated subject for your tool. Treat as opaque; do not assume UUID format. */
-  /** @deprecated Use subject. */
-  accountId: string;
 
   /** User's display name. May change over time - don't use as a primary key. */
   displayName: string;
@@ -94,14 +79,14 @@ export interface PriorUserInfo {
 export interface PriorIdentityInstance {
   /**
    * Validate a Bearer token (from an HTTP Authorization header).
-   * Accepts the legacy identity token plus the delegated OIDC access token when it has identity:read.
+   * Accepts delegated OIDC access tokens with identity:read.
    * Returns the user if valid, null if invalid/expired/wrong audience.
    */
   validate(token: string): Promise<PriorUser | null>;
 
   /**
-   * Validate the identity token from an environment variable (stdio transport).
-   * Reads from PRIOR_IDENTITY_TOKEN (or custom env var) and validates once.
+   * Validate the delegated access token from an environment variable (stdio transport).
+   * Reads from PRIOR_ACCESS_TOKEN (or custom env var) and validates once.
    * Returns the user if valid, null if missing/invalid.
    */
   validateEnv(): Promise<PriorUser | null>;
@@ -133,10 +118,6 @@ export interface PriorIdentityInstance {
     timeout?: number;
     authorizeUrl?: string;
     tokenUrl?: string;
-    /** @deprecated Use authorizeUrl. */
-    connectUrl?: string;
-    /** @deprecated Use tokenUrl. */
-    exchangeUrl?: string;
     headless?: boolean;
     onUrl?: (url: string) => void;
   }): Promise<PriorUser | null>;

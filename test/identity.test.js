@@ -11,19 +11,25 @@ before(async () => {
 });
 
 async function createToken(claims = {}, options = {}) {
-  return new jose.SignJWT({
+  const builder = new jose.SignJWT({
     name: "Alice",
     scope: "identity:read",
-    type: "identity",
+    type: "access",
     ...claims,
   })
     .setProtectedHeader({ alg: "ES256", kid: "test-key" })
     .setIssuer(options.issuer || "https://api.cg3.io")
-    .setSubject(claims.sub || "account-123")
     .setJti(claims.jti || "jti-abc")
     .setAudience(options.audience !== undefined ? options.audience : "codenotes")
-    .setExpirationTime(options.exp || "1h")
-    .sign(privateKey);
+    .setExpirationTime(options.exp || "1h");
+
+  if (!Object.prototype.hasOwnProperty.call(claims, "sub")) {
+    builder.setSubject("account-123");
+  } else if (typeof claims.sub === "string") {
+    builder.setSubject(claims.sub);
+  }
+
+  return builder.sign(privateKey);
 }
 
 async function withLocalOidcIssuer(options, fn) {
@@ -100,7 +106,7 @@ describe("@cg3/prior-identity", () => {
   it("validateEnv returns null when env var not set", async () => {
     const { createPriorIdentity } = await import("../dist/index.js");
     const identity = createPriorIdentity({ clientId: "codenotes" });
-    delete process.env.PRIOR_IDENTITY_TOKEN;
+    delete process.env.PRIOR_ACCESS_TOKEN;
     const result = await identity.validateEnv();
     assert.equal(result, null);
   });
@@ -189,7 +195,6 @@ describe("validate with local issuer metadata", () => {
       const result = await identity.validate(token);
       assert.deepEqual(result, {
         subject: "account-issuer",
-        accountId: "account-issuer",
         displayName: "Issuer Alice",
         audience: "codenotes",
         jti: "jti-issuer",
@@ -218,7 +223,6 @@ describe("validate with local issuer metadata", () => {
       const result = await identity.validate(token);
       assert.deepEqual(result, {
         subject: "account-456",
-        accountId: "account-456",
         displayName: "Delegated Alice",
         audience: "codenotes",
         jti: "jti-delegated",
@@ -249,27 +253,26 @@ describe("validate with local issuer metadata", () => {
     });
   });
 
-  it("keeps augmentName as a backward-compatible alias for clientId", async () => {
+  it("rejects legacy identity tokens after the Phase 6 cutover", async () => {
     const kp = await jose.generateKeyPair("ES256");
     const token = await new jose.SignJWT({
-      name: "Alias Alice",
+      name: "Legacy Alice",
       scope: "identity:read",
-      type: "access",
+      type: "identity",
     })
       .setProtectedHeader({ alg: "ES256", kid: "local-test-key" })
       .setIssuer("https://api.cg3.io")
-      .setSubject("account-alias")
-      .setJti("jti-alias")
+      .setSubject("legacy-account")
+      .setJti("legacy-jti")
       .setAudience("codenotes")
       .setExpirationTime("1h")
       .sign(kp.privateKey);
 
     await withLocalOidcIssuer({ keyPair: kp }, async (issuer) => {
       const { createPriorIdentity } = await import("../dist/index.js");
-      const identity = createPriorIdentity({ augmentName: "codenotes", jwksUrl: `${issuer}/.well-known/jwks.json` });
+      const identity = createPriorIdentity({ clientId: "codenotes", jwksUrl: `${issuer}/.well-known/jwks.json` });
       const result = await identity.validate(token);
-      assert.equal(result?.subject, "account-alias");
-      assert.equal(result?.accountId, "account-alias");
+      assert.equal(result, null);
     });
   });
 
