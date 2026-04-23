@@ -119,7 +119,9 @@ Reads the token from `PRIOR_ACCESS_TOKEN` (or your custom env var) and validates
 
 Calls Prior's standard OIDC UserInfo endpoint. The SDK discovers `userinfo_endpoint` from OIDC metadata unless you override `userinfoUrl`.
 
-Typical response shape:
+`validate()` does not include email or other richer profile claims. Use `getUserInfo()` when you need that data.
+
+Typical response shape when those claims are available for the delegated session:
 
 ```typescript
 {
@@ -132,7 +134,7 @@ Typical response shape:
 
 ### `identity.getEmail(token): Promise<string | null>`
 
-Convenience helper on top of `getUserInfo()`. Useful for account linking during first-visit provisioning.
+Convenience helper on top of `getUserInfo()`. Useful for account linking during first-visit provisioning when you only need the email claim.
 
 ### `identity.connectInteractive(options?): Promise<PriorUser | null>`
 
@@ -216,14 +218,12 @@ const identity = createPriorIdentity({
 });
 ```
 
-## Migration and cutover
-
-As of April 22, 2026, the Phase 6 cutover is complete for this SDK surface.
+## Current contract
 
 - Supported interactive delegated flow: `/authorize` + `/token` + `/userinfo`
 - Supported local validation contract: ES256 delegated `type="access"` token with `scope` containing `identity:read`
-- Removed in Phase 6: legacy `type="identity"` token acceptance, `augmentName`, `accountId`, `connectUrl`, `exchangeUrl`, and `PRIOR_IDENTITY_TOKEN`
-- Do not build new integrations on `POST /v1/identity/connect`, `POST /v1/identity/exchange`, or `POST /v1/identity/token`
+- This SDK uses `clientId`, `user.subject`, `authorizeUrl`, `tokenUrl`, and `PRIOR_ACCESS_TOKEN`
+- Legacy delegated-auth surfaces such as `POST /v1/identity/connect`, `POST /v1/identity/exchange`, and `POST /v1/identity/token` are not part of this SDK's supported integration path
 
 Publisher migration guide and legacy replacement map: [PUBLISHER_MIGRATION.md](./PUBLISHER_MIGRATION.md)
 
