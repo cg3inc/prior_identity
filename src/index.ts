@@ -4,7 +4,7 @@
  * Usage (HTTP):
  *   const identity = createPriorIdentity({ clientId: "my-tool" });
  *   const user = await identity.validate(bearerToken);
- *   // user = { accountId: "opaque-subject", displayName: "Alice" }
+ *   // user = { subject: "opaque-subject", accountId: "opaque-subject", displayName: "Alice" }
  *
  * Usage (stdio):
  *   const identity = createPriorIdentity({ clientId: "my-tool" });

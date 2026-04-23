@@ -188,6 +188,7 @@ describe("validate with local issuer metadata", () => {
       const identity = createPriorIdentity({ clientId: "codenotes", issuer });
       const result = await identity.validate(token);
       assert.deepEqual(result, {
+        subject: "account-issuer",
         accountId: "account-issuer",
         displayName: "Issuer Alice",
         audience: "codenotes",
@@ -216,6 +217,7 @@ describe("validate with local issuer metadata", () => {
       const identity = createPriorIdentity({ clientId: "codenotes", jwksUrl: `${issuer}/.well-known/jwks.json` });
       const result = await identity.validate(token);
       assert.deepEqual(result, {
+        subject: "account-456",
         accountId: "account-456",
         displayName: "Delegated Alice",
         audience: "codenotes",
@@ -266,6 +268,7 @@ describe("validate with local issuer metadata", () => {
       const { createPriorIdentity } = await import("../dist/index.js");
       const identity = createPriorIdentity({ augmentName: "codenotes", jwksUrl: `${issuer}/.well-known/jwks.json` });
       const result = await identity.validate(token);
+      assert.equal(result?.subject, "account-alias");
       assert.equal(result?.accountId, "account-alias");
     });
   });

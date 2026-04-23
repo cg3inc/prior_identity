@@ -15,17 +15,17 @@ interface PriorIdentityBaseConfig {
   tokenEnvVar?: string;
 
   /**
-   * Called when a user is seen for the first time (accountId not previously encountered).
+   * Called when a user is seen for the first time (subject not previously encountered).
    * Use this to auto-provision storage, create a user record, etc.
    * The raw token is provided so you can call getEmail() for account linking.
    */
   onNewUser?: (user: PriorUser, token: string) => Promise<void>;
 
   /**
-   * Called to check if an accountId is already known. Return any truthy value to skip onNewUser.
+   * Called to check if a delegated subject is already known. Return any truthy value to skip onNewUser.
    * If not provided, onNewUser is called on every request (you handle deduplication).
    */
-  resolveUser?: (accountId: string) => Promise<unknown>;
+  resolveUser?: (subject: string) => Promise<unknown>;
 }
 
 /**
@@ -52,6 +52,10 @@ export type PriorIdentityConfig =
  */
 export interface PriorUser {
   /** Stable delegated subject for your tool. Treat as opaque; do not assume UUID format. */
+  subject: string;
+
+  /** Stable delegated subject for your tool. Treat as opaque; do not assume UUID format. */
+  /** @deprecated Use subject. */
   accountId: string;
 
   /** User's display name. May change over time - don't use as a primary key. */

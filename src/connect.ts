@@ -43,6 +43,8 @@ interface PersistedToken {
   accessToken?: string;
   /** @deprecated Legacy persisted field name. */
   identityToken?: string;
+  subject?: string;
+  /** @deprecated Use subject. */
   accountId: string;
   displayName: string;
   issuedAt: string;
@@ -271,6 +273,7 @@ export async function connectInteractive(
         writePersistedToken({
           clientId,
           accessToken,
+          subject: user.subject,
           accountId: user.accountId,
           displayName: user.displayName,
           issuedAt: new Date().toISOString(),

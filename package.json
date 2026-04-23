@@ -16,7 +16,8 @@
     }
   },
   "files": [
-    "dist"
+    "dist",
+    "PUBLISHER_MIGRATION.md"
   ],
   "publishConfig": {
     "access": "public"

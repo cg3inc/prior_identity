@@ -11,10 +11,12 @@ import { createPriorIdentity } from "@cg3/prior-identity";
 
 const identity = createPriorIdentity({ clientId: "my-tool" });
 const user = await identity.validate(bearerToken);
-// user = { accountId: "tool-scoped subject", displayName: "Alice" }
+// user = { subject: "tool-scoped subject", accountId: "tool-scoped subject", displayName: "Alice" }
 ```
 
 `clientId` is the preferred config name. `augmentName` is still accepted as a backward-compatible alias during the rollout.
+
+Important: the delegated user identifier is pairwise per relying party. `user.subject` is stable for your tool only and must not be used to correlate the same human across different tools. `user.accountId` remains as a compatibility alias for that same opaque subject during the Phase 4 migration window.
 
 ## Install
 
@@ -35,7 +37,7 @@ const identity = createPriorIdentity({ clientId: "my-tool" });
 
 async function authenticate(token: string) {
   const priorUser = await identity.validate(token);
-  if (priorUser) return { accountId: priorUser.accountId };
+  if (priorUser) return { subject: priorUser.subject };
 
   return await yourExistingAuth(token);
 }
@@ -97,9 +99,9 @@ Verification is local. The SDK caches Prior's JWKS and does not make a network r
 | `discoveryUrl` | `string` | `{issuer}/.well-known/openid-configuration` | Optional override for OIDC discovery. |
 | `jwksUrl` | `string` | `{issuer}/.well-known/jwks.json` | Optional override for JWKS verification. |
 | `userinfoUrl` | `string` | discovered or `{issuer}/userinfo` | Optional override for OIDC UserInfo. |
-| `tokenEnvVar` | `string` | `PRIOR_IDENTITY_TOKEN` | Env var for stdio token validation. |
+| `tokenEnvVar` | `string` | `PRIOR_IDENTITY_TOKEN` | Env var for stdio token validation. Historical name; the supported token is an OIDC delegated access token. |
 | `onNewUser` | `(user, token) => Promise<void>` | -- | Called on first visit from a new delegated subject. |
-| `resolveUser` | `(accountId) => Promise<unknown>` | -- | Return truthy to skip `onNewUser` for known users. |
+| `resolveUser` | `(subject) => Promise<unknown>` | -- | Return truthy to skip `onNewUser` for known users. |
 
 ### `identity.validate(token): Promise<PriorUser | null>`
 
@@ -161,7 +163,8 @@ Options:
 
 ```typescript
 interface PriorUser {
-  accountId: string;   // Stable delegated subject for your tool. Treat as opaque.
+  subject: string;     // Preferred field for the pairwise delegated subject.
+  accountId: string;   // Compatibility alias for subject during migration.
   displayName: string; // Human-readable and mutable.
   audience: string;    // The relying party / client id from `aud`.
   jti: string;         // Unique token id.
@@ -205,17 +208,28 @@ const identity = createPriorIdentity({
     const email = await identity.getEmail(token);
     const existing = email ? await db.users.findByEmail(email) : null;
     if (existing) {
-      await db.users.update(existing.id, { priorAccountId: priorUser.accountId });
+      await db.users.update(existing.id, { priorSubject: priorUser.subject });
     } else {
       await db.users.create({
-        priorAccountId: priorUser.accountId,
+        priorSubject: priorUser.subject,
         displayName: priorUser.displayName,
       });
     }
   },
-  resolveUser: async (accountId) => db.users.findByPriorAccountId(accountId),
+  resolveUser: async (subject) => db.users.findByPriorSubject(subject),
 });
 ```
+
+## Migration and cutover
+
+Use the OIDC path for all new integrations as of April 22, 2026.
+
+- Supported interactive delegated flow: `/authorize` + `/token` + `/userinfo`
+- Supported local validation contract: ES256 delegated `type="access"` token with `scope` containing `identity:read`
+- Compatibility only during the Phase 4 migration window: legacy `type="identity"` token acceptance and the `accountId` field name
+- Do not build new integrations on `POST /v1/identity/connect`, `POST /v1/identity/exchange`, or `POST /v1/identity/token`
+
+Publisher migration guide and legacy replacement map: [PUBLISHER_MIGRATION.md](./PUBLISHER_MIGRATION.md)
 
 ## Reliability and exit cost
 

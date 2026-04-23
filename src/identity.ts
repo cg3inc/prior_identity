@@ -113,27 +113,28 @@ export function createPriorIdentity(config: PriorIdentityConfig): PriorIdentityI
     }
 
     const user: PriorUser = {
+      subject: payload.sub,
       accountId: payload.sub,
       displayName: (payload.name as string) || "User",
       audience: clientId,
       jti: payload.jti,
     };
 
-    if (onNewUser && !seenUsers.has(user.accountId) && !pendingUsers.has(user.accountId)) {
-      pendingUsers.add(user.accountId);
+    if (onNewUser && !seenUsers.has(user.subject) && !pendingUsers.has(user.subject)) {
+      pendingUsers.add(user.subject);
       try {
         let isKnown = false;
         if (resolveUser) {
-          isKnown = !!(await resolveUser(user.accountId));
+          isKnown = !!(await resolveUser(user.subject));
         }
         if (!isKnown) {
           await onNewUser(user, token);
         }
-        seenUsers.add(user.accountId);
+        seenUsers.add(user.subject);
       } catch (e) {
-        logDebug(`onNewUser callback failed for ${user.accountId}: ${e instanceof Error ? e.message : e}`);
+        logDebug(`onNewUser callback failed for ${user.subject}: ${e instanceof Error ? e.message : e}`);
       } finally {
-        pendingUsers.delete(user.accountId);
+        pendingUsers.delete(user.subject);
       }
     }
 
