@@ -231,10 +231,10 @@ describe("validate with local issuer metadata", () => {
   });
 
   it("rejects delegated access token without identity:read scope", async () => {
-    const kp = await jose.generateKeyPair("ES256");
-    const token = await new jose.SignJWT({
-      name: "Delegated Alice",
-      scope: "profile",
+      const kp = await jose.generateKeyPair("ES256");
+      const token = await new jose.SignJWT({
+        name: "Delegated Alice",
+        scope: "profile",
       type: "access",
     })
       .setProtectedHeader({ alg: "ES256", kid: "local-test-key" })
@@ -253,11 +253,57 @@ describe("validate with local issuer metadata", () => {
     });
   });
 
-  it("rejects tokens with unsupported type claims", async () => {
+  it("rejects delegated access tokens with the wrong issuer", async () => {
     const kp = await jose.generateKeyPair("ES256");
     const token = await new jose.SignJWT({
-      name: "Unsupported Alice",
+      name: "Wrong Issuer Alice",
       scope: "identity:read",
+      type: "access",
+    })
+      .setProtectedHeader({ alg: "ES256", kid: "local-test-key" })
+      .setIssuer("https://wrong-issuer.example.com")
+      .setSubject("account-wrong-issuer")
+      .setJti("jti-wrong-issuer")
+      .setAudience("codenotes")
+      .setExpirationTime("1h")
+      .sign(kp.privateKey);
+
+    await withLocalOidcIssuer({ keyPair: kp }, async (issuer) => {
+      const { createPriorIdentity } = await import("../dist/index.js");
+      const identity = createPriorIdentity({ clientId: "codenotes", issuer, jwksUrl: `${issuer}/.well-known/jwks.json` });
+      const result = await identity.validate(token);
+      assert.equal(result, null);
+    });
+  });
+
+  it("rejects expired delegated access tokens", async () => {
+    const kp = await jose.generateKeyPair("ES256");
+    const token = await new jose.SignJWT({
+      name: "Expired Alice",
+      scope: "identity:read",
+      type: "access",
+    })
+      .setProtectedHeader({ alg: "ES256", kid: "local-test-key" })
+      .setIssuer("https://api.cg3.io")
+      .setSubject("account-expired")
+      .setJti("jti-expired")
+      .setAudience("codenotes")
+      .setExpirationTime("1 second ago")
+      .sign(kp.privateKey);
+
+    await withLocalOidcIssuer({ keyPair: kp }, async (issuer) => {
+      const { createPriorIdentity } = await import("../dist/index.js");
+      const identity = createPriorIdentity({ clientId: "codenotes", jwksUrl: `${issuer}/.well-known/jwks.json` });
+      const result = await identity.validate(token);
+      assert.equal(result, null);
+    });
+  });
+
+  it("rejects tokens with unsupported type claims", async () => {
+      const kp = await jose.generateKeyPair("ES256");
+      const token = await new jose.SignJWT({
+        name: "Unsupported Alice",
+        scope: "identity:read",
       type: "identity",
     })
       .setProtectedHeader({ alg: "ES256", kid: "local-test-key" })
