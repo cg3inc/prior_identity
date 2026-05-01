@@ -1,6 +1,6 @@
 {
   "name": "@cg3/prior-identity",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "Prior Identity SDK — add user identity to your MCP server in 3 lines",
   "type": "module",
   "main": "dist/index.js",
