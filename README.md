@@ -57,9 +57,11 @@ if (!user) {
 }
 ```
 
+For stdio servers, `validateEnv()` reads `PRIOR_IDENTITY_ACCESS_TOKEN` by default. That value is a short-lived delegated Prior Identity access token for the relying party named by `clientId`. It is not a Prior Knowledge API key and not a broad "all Prior products" credential; its audience and scopes define where it can be used.
+
 ## What users experience
 
-Equip users get first-party brokered delegated auth. Equip exchanges the user's CG3 session for a relying-party access token, writes that token into MCP config, and refreshes it in the background.
+Equip users get first-party brokered delegated auth. Equip exchanges the user's CG3 session for a relying-party access token, writes that token into MCP config, and refreshes it in the background. For stdio transports, publishers should configure their registry `envKey` to `PRIOR_IDENTITY_ACCESS_TOKEN` when they use this SDK's default `validateEnv()` behavior.
 
 Manual users go through a standard OIDC auth-code + PKCE flow. `connectInteractive()` opens `/authorize`, the user signs in, explicitly approves the relying party, and the SDK exchanges the code at `/token`. The delegated access token is persisted under `~/.prior/identity/{clientId}.json`.
 
@@ -96,7 +98,7 @@ Verification is local. The SDK caches Prior's JWKS and does not make a network r
 | `discoveryUrl` | `string` | `{issuer}/.well-known/openid-configuration` | Optional override for OIDC discovery. |
 | `jwksUrl` | `string` | `{issuer}/.well-known/jwks.json` | Optional override for JWKS verification. |
 | `userinfoUrl` | `string` | discovered or `{issuer}/userinfo` | Optional override for OIDC UserInfo. |
-| `tokenEnvVar` | `string` | `PRIOR_ACCESS_TOKEN` | Env var for stdio token validation. |
+| `tokenEnvVar` | `string` | `PRIOR_IDENTITY_ACCESS_TOKEN` | Env var for stdio delegated identity token validation. |
 | `onNewUser` | `(user, token) => Promise<void>` | -- | Called on first visit from a new delegated subject. |
 | `resolveUser` | `(subject) => Promise<unknown>` | -- | Return truthy to skip `onNewUser` for known users. |
 
@@ -113,7 +115,7 @@ Returns `null` for invalid, expired, wrong-audience, wrong-issuer, or unsupporte
 
 ### `identity.validateEnv(): Promise<PriorUser | null>`
 
-Reads the token from `PRIOR_ACCESS_TOKEN` (or your custom env var) and validates it once.
+Reads the token from `PRIOR_IDENTITY_ACCESS_TOKEN` (or your custom env var) and validates it once.
 
 ### `identity.getUserInfo(token): Promise<PriorUserInfo | null>`
 
@@ -222,7 +224,7 @@ const identity = createPriorIdentity({
 
 - Supported interactive delegated flow: `/authorize` + `/token` + `/userinfo`
 - Supported local validation contract: ES256 delegated `type="access"` token with `scope` containing `identity:read`
-- This SDK uses `clientId`, `user.subject`, `authorizeUrl`, `tokenUrl`, and `PRIOR_ACCESS_TOKEN`
+- This SDK uses `clientId`, `user.subject`, `authorizeUrl`, `tokenUrl`, and `PRIOR_IDENTITY_ACCESS_TOKEN`
 
 ## Reliability and exit cost
 

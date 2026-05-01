@@ -13,7 +13,7 @@ before(async () => {
 async function createToken(claims = {}, options = {}) {
   const builder = new jose.SignJWT({
     name: "Alice",
-    scope: "identity:read",
+    scope: "cg3:prior:identity:read",
     type: "access",
     ...claims,
   })
@@ -106,7 +106,7 @@ describe("@cg3/prior-identity", () => {
   it("validateEnv returns null when env var not set", async () => {
     const { createPriorIdentity } = await import("../dist/index.js");
     const identity = createPriorIdentity({ clientId: "codenotes" });
-    delete process.env.PRIOR_ACCESS_TOKEN;
+    delete process.env.PRIOR_IDENTITY_ACCESS_TOKEN;
     const result = await identity.validateEnv();
     assert.equal(result, null);
   });
@@ -179,7 +179,7 @@ describe("validate with local issuer metadata", () => {
     await withLocalOidcIssuer({ keyPair: kp }, async (issuer) => {
       const token = await new jose.SignJWT({
         name: "Issuer Alice",
-        scope: "identity:read",
+        scope: "cg3:prior:identity:read",
         type: "access",
       })
         .setProtectedHeader({ alg: "ES256", kid: "local-test-key" })
@@ -202,11 +202,11 @@ describe("validate with local issuer metadata", () => {
     });
   });
 
-  it("validates a delegated access token with identity:read scope", async () => {
+  it("validates a delegated access token with cg3:prior:identity:read scope", async () => {
     const kp = await jose.generateKeyPair("ES256");
     const token = await new jose.SignJWT({
       name: "Delegated Alice",
-      scope: "identity:read",
+      scope: "cg3:prior:identity:read",
       type: "access",
     })
       .setProtectedHeader({ alg: "ES256", kid: "local-test-key" })
@@ -230,7 +230,7 @@ describe("validate with local issuer metadata", () => {
     });
   });
 
-  it("rejects delegated access token without identity:read scope", async () => {
+  it("rejects delegated access token without cg3:prior:identity:read scope", async () => {
       const kp = await jose.generateKeyPair("ES256");
       const token = await new jose.SignJWT({
         name: "Delegated Alice",
@@ -253,11 +253,34 @@ describe("validate with local issuer metadata", () => {
     });
   });
 
+  it("rejects delegated access token with deleted identity:read scope", async () => {
+    const kp = await jose.generateKeyPair("ES256");
+    const token = await new jose.SignJWT({
+      name: "Delegated Alice",
+      scope: "identity:read",
+      type: "access",
+    })
+      .setProtectedHeader({ alg: "ES256", kid: "local-test-key" })
+      .setIssuer("https://api.cg3.io")
+      .setSubject("account-456")
+      .setJti("jti-delegated-deleted-scope")
+      .setAudience("codenotes")
+      .setExpirationTime("1h")
+      .sign(kp.privateKey);
+
+    await withLocalOidcIssuer({ keyPair: kp }, async (issuer) => {
+      const { createPriorIdentity } = await import("../dist/index.js");
+      const identity = createPriorIdentity({ clientId: "codenotes", jwksUrl: `${issuer}/.well-known/jwks.json` });
+      const result = await identity.validate(token);
+      assert.equal(result, null);
+    });
+  });
+
   it("rejects delegated access tokens with the wrong issuer", async () => {
     const kp = await jose.generateKeyPair("ES256");
     const token = await new jose.SignJWT({
       name: "Wrong Issuer Alice",
-      scope: "identity:read",
+      scope: "cg3:prior:identity:read",
       type: "access",
     })
       .setProtectedHeader({ alg: "ES256", kid: "local-test-key" })
@@ -280,7 +303,7 @@ describe("validate with local issuer metadata", () => {
     const kp = await jose.generateKeyPair("ES256");
     const token = await new jose.SignJWT({
       name: "Expired Alice",
-      scope: "identity:read",
+      scope: "cg3:prior:identity:read",
       type: "access",
     })
       .setProtectedHeader({ alg: "ES256", kid: "local-test-key" })
@@ -303,7 +326,7 @@ describe("validate with local issuer metadata", () => {
       const kp = await jose.generateKeyPair("ES256");
       const token = await new jose.SignJWT({
         name: "Unsupported Alice",
-        scope: "identity:read",
+        scope: "cg3:prior:identity:read",
       type: "identity",
     })
       .setProtectedHeader({ alg: "ES256", kid: "local-test-key" })

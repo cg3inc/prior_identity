@@ -21,7 +21,7 @@ async function handleRequest(req: Request): Promise<Response> {
 async function startStdio() {
   const user = await identity.validateEnv();
   if (!user) {
-    console.error("Set PRIOR_ACCESS_TOKEN env var");
+    console.error("Set PRIOR_IDENTITY_ACCESS_TOKEN env var");
     process.exit(1);
   }
 

@@ -11,7 +11,7 @@ interface PriorIdentityBaseConfig {
   /** OIDC UserInfo endpoint URL. Default: discovered from OIDC metadata or {issuer}/userinfo */
   userinfoUrl?: string;
 
-  /** Env var name for stdio token. Default: PRIOR_ACCESS_TOKEN */
+  /** Env var name for stdio delegated identity token. Default: PRIOR_IDENTITY_ACCESS_TOKEN */
   tokenEnvVar?: string;
 
   /**
@@ -79,14 +79,14 @@ export interface PriorUserInfo {
 export interface PriorIdentityInstance {
   /**
    * Validate a Bearer token (from an HTTP Authorization header).
-   * Accepts delegated OIDC access tokens with identity:read.
+   * Accepts delegated OIDC access tokens with cg3:prior:identity:read.
    * Returns the user if valid, null if invalid/expired/wrong audience.
    */
   validate(token: string): Promise<PriorUser | null>;
 
   /**
    * Validate the delegated access token from an environment variable (stdio transport).
-   * Reads from PRIOR_ACCESS_TOKEN (or custom env var) and validates once.
+   * Reads from PRIOR_IDENTITY_ACCESS_TOKEN (or custom env var) and validates once.
    * Returns the user if valid, null if missing/invalid.
    */
   validateEnv(): Promise<PriorUser | null>;

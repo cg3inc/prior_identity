@@ -9,7 +9,7 @@
  * Usage (stdio):
  *   const identity = createPriorIdentity({ clientId: "my-tool" });
  *   const user = await identity.validateEnv();
- *   // reads PRIOR_ACCESS_TOKEN from env, validates once
+ *   // reads PRIOR_IDENTITY_ACCESS_TOKEN from env, validates once
  */
 
 export { createPriorIdentity } from "./identity.js";

@@ -2,7 +2,7 @@ import * as jose from "jose";
 import type { PriorIdentityConfig, PriorIdentityInstance, PriorUser, PriorUserInfo } from "./types.js";
 
 const DEFAULT_ISSUER = "https://api.cg3.io";
-const DEFAULT_TOKEN_ENV_VAR = "PRIOR_ACCESS_TOKEN";
+const DEFAULT_TOKEN_ENV_VAR = "PRIOR_IDENTITY_ACCESS_TOKEN";
 
 interface OidcDiscoveryDocument {
   authorization_endpoint?: string;
@@ -95,8 +95,8 @@ export function createPriorIdentity(config: PriorIdentityConfig): PriorIdentityI
       return null;
     }
     const scopeClaim = typeof payload.scope === "string" ? payload.scope : "";
-    if (!scopeClaim.split(" ").includes("identity:read")) {
-      logDebug("Token rejected: delegated access token missing identity:read scope");
+    if (!scopeClaim.split(" ").includes("cg3:prior:identity:read")) {
+      logDebug("Token rejected: delegated access token missing cg3:prior:identity:read scope");
       return null;
     }
     if (!payload.sub) {

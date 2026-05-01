@@ -23,6 +23,7 @@
   },
   "scripts": {
     "build": "tsc",
+    "pretest": "npm run build",
     "test": "node --test test/*.test.js",
     "prepublishOnly": "npm run build"
   },

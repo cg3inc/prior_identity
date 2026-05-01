@@ -292,7 +292,7 @@ export async function connectInteractive(
         state,
         code_challenge: codeChallenge,
         code_challenge_method: "S256",
-        scope: "identity:read",
+        scope: "cg3:prior:identity:read",
       }).toString();
 
       logDebug(`Listening on ${redirectUri}`);
